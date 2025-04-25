@@ -1,0 +1,56 @@
+import json
+import boto3
+from datetime import datetime
+import logging
+
+# Set up logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# Create an EC2 client
+ec2 = boto3.client('ec2')
+
+# Lambda function handler
+def lambda_handler(event, context):
+    try:
+        # Replace 'your-instance-id' with your actual EC2 instance ID
+        instance_id = 'your-instance-id'
+        
+        # Generate a description for the snapshot with the current timestamp
+        snapshot_description = f"Snapshot for instance {instance_id} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        
+        # Create a snapshot for the specified volume associated with the given instance
+        response = ec2.create_snapshot(
+            Description=snapshot_description,
+            VolumeId=get_instance_volume_id(instance_id)
+        )
+
+        # Add tags to the created snapshot
+        ec2.create_tags(
+            Resources=[response['SnapshotId']],
+            Tags=[
+                {'Key': 'Name', 'Value': f'Snapshot for {instance_id}'},
+                {'Key': 'CreatedBy', 'Value': 'lambdaEC2DailySnapshot'}
+            ]
+        )
+
+        # Log success message
+        logger.info(f"Snapshot {response['SnapshotId']} created successfully.")
+        
+    except Exception as e:
+        # Log any errors that occur during the execution of the function
+        logger.error(f"Error creating snapshot: {str(e)}")
+
+# Function to retrieve the volume ID associated with the given EC2 instance
+def get_instance_volume_id(instance_id):
+    try:
+        # Describe the specified instance to get details, including the volume ID
+        response = ec2.describe_instances(InstanceIds=[instance_id])
+        
+        # Extract and return the volume ID
+        return response['Reservations'][0]['Instances'][0]['BlockDeviceMappings'][0]['Ebs']['VolumeId']
+    
+    except Exception as e:
+        # Log any errors that occur during the execution of the function
+        logger.error(f"Error getting instance volume ID: {str(e)}")
+        return None
